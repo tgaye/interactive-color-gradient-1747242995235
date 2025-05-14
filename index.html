@@ -1,0 +1,474 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Color Gradient</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            height: auto;
+            aspect-ratio: 16/9;
+            position: relative;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            max-width: 250px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .value-display {
+            font-size: 12px;
+            color: #aaa;
+            text-align: right;
+        }
+        
+        .color-picker {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .color-picker input {
+            margin-right: 10px;
+        }
+        
+        .color-swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            display: inline-block;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        #toggle-ui {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+        }
+        
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 0, 0, 0.3);
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+    </head><body><div id="canvas-container">
+        <div id="error-message"></div>
+    </div>
+    
+    <div id="ui">
+        <div class="control-group">
+            <h3>Color Gradient</h3>
+            <div class="color-picker">
+                <input type="color" id="color1" value="#ff3366">
+                <span class="color-swatch" style="background-color: #ff3366;"></span>
+            </div>
+            <div class="color-picker">
+                <input type="color" id="color2" value="#33ccff">
+                <span class="color-swatch" style="background-color: #33ccff;"></span>
+            </div>
+            <div class="color-picker">
+                <input type="color" id="color3" value="#9933ff">
+                <span class="color-swatch" style="background-color: #9933ff;"></span>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label for="speed">Animation Speed</label>
+            <input type="range" id="speed" min="0" max="2" step="0.1" value="0.5">
+            <div class="value-display" id="speed-value">0.5</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="distortion">Distortion Amount</label>
+            <input type="range" id="distortion" min="0" max="1" step="0.01" value="0.3">
+            <div class="value-display" id="distortion-value">0.3</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="mouseInfluence">Mouse Influence</label>
+            <input type="range" id="mouseInfluence" min="0" max="2" step="0.1" value="1.0">
+            <div class="value-display" id="mouseInfluence-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="blendMode">Blend Mode</label>
+            <select id="blendMode">
+                <option value="0">Linear</option>
+                <option value="1">Radial</option>
+                <option value="2">Noise</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <button id="randomize">Randomize Colors</button>
+            <button id="reset">Reset</button>
+        </div>
+    </div>
+    
+    <button id="toggle-ui">Toggle UI</button>
+
+    <script>
+        // Check for WebGL support
+        if (!WebGLRenderingContext) {
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = 'Your browser does not support WebGL. Please try with a modern browser.';
+            errorMessage.style.display = 'block';
+            throw new Error('WebGL not supported');
+        }
+
+        // Main Three.js setup
+        const container = document.getElementById('canvas-container');
+        const width = Math.min(window.innerWidth, 1200);
+        const height = width / (16/9);
+        
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: "high-performance"
+        });
+        
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+        
+        // Mouse position tracking
+        const mouse = new THREE.Vector2(0, 0);
+        const targetMouse = new THREE.Vector2(0, 0);
+        
+        // Handle mouse movement
+        function onMouseMove(event) {
+            // Normalize mouse coordinates to -1 to 1 range
+            targetMouse.x = (event.clientX / width) * 2 - 1;
+            targetMouse.y = -(event.clientY / height) * 2 + 1;
+        }
+        
+        // Handle touch movement
+        function onTouchMove(event) {
+            event.preventDefault();
+            const touch = event.touches[0];
+            targetMouse.x = (touch.clientX / width) * 2 - 1;
+            targetMouse.y = -(touch.clientY / height) * 2 + 1;
+        }
+        
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        
+        // Shader uniforms
+        const uniforms = {
+            time: { value: 0 },
+            resolution: { value: new THREE.Vector2(width, height) },
+            mouse: { value: new THREE.Vector2(0, 0) },
+            color1: { value: new THREE.Color(0xff3366) },
+            color2: { value: new THREE.Color(0x33ccff) },
+            color3: { value: new THREE.Color(0x9933ff) },
+            speed: { value: 0.5 },
+            distortion: { value: 0.3 },
+            mouseInfluence: { value: 1.0 },
+            blendMode: { value: 0 }
+        };
+        
+        // Shader material
+        const material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: `
+                varying vec2 vUv;
+                
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                precision highp float;
+                
+                uniform float time;
+                uniform vec2 resolution;
+                uniform vec2 mouse;
+                uniform vec3 color1;
+                uniform vec3 color2;
+                uniform vec3 color3;
+                uniform float speed;
+                uniform float distortion;
+                uniform float mouseInfluence;
+                uniform int blendMode;
+                
+                varying vec2 vUv;
+                
+                // Smooth interpolation function
+                float smoothBlend(float a, float b, float blend) {
+                    blend = clamp(blend, 0.0, 1.0);
+                    return mix(a, b, blend * blend * (3.0 - 2.0 * blend));
+                }
+                
+                // 2D rotation matrix
+                mat2 rotate2d(float angle) {
+                    return mat2(cos(angle), -sin(angle),
+                                sin(angle), cos(angle));
+                }
+                
+                // Simple noise function for distortion
+                float noise(vec2 p) {
+                    vec2 ip = floor(p);
+                    vec2 fp = fract(p);
+                    float a = dot(ip, vec2(12.9898, 78.233));
+                    float b = dot(ip + vec2(1.0, 0.0), vec2(12.9898, 78.233));
+                    float c = dot(ip + vec2(0.0, 1.0), vec2(12.9898, 78.233));
+                    float d = dot(ip + vec2(1.0, 1.0), vec2(12.9898, 78.233));
+                    
+                    float ab = mix(fract(sin(a) * 43758.5453), fract(sin(b) * 43758.5453), fp.x);
+                    float cd = mix(fract(sin(c) * 43758.5453), fract(sin(d) * 43758.5453), fp.x);
+                    return mix(ab, cd, fp.y);
+                }
+                
+                void main() {
+                    vec2 uv = vUv;
+                    vec2 center = vec2(0.5);
+                    
+                    // Apply mouse influence
+                    vec2 mouseOffset = mouse * mouseInfluence * 0.1;
+                    
+                    // Create distortion effect
+                    float distort = distortion * 0.5;
+                    uv.x += sin(time * 0.5 + uv.y * 10.0) * distort;
+                    uv.y += cos(time * 0.3 + uv.x * 8.0) * distort;
+                    
+                    // Add mouse position to distortion
+                    uv += mouseOffset;
+                    
+                    // Calculate blend factors based on blend mode
+                    float blend1, blend2, blend3;
+                    
+                    if (blendMode == 0) {
+                        // Linear blend
+                        blend1 = smoothstep(0.0, 0.5, uv.x);
+                        blend2 = smoothstep(0.3, 0.7, uv.x);
+                        blend3 = smoothstep(0.5, 1.0, uv.x);
+                    } else if (blendMode == 1) {
+                        // Radial blend
+                        float dist = distance(uv, center + mouseOffset * 0.3);
+                        blend1 = smoothstep(0.0, 0.5, dist);
+                        blend2 = smoothstep(0.3, 0.7, dist);
+                        blend3 = smoothstep(0.5, 1.0, dist);
+                    } else {
+                        // Noise-based blend
+                        float n = noise(uv * 5.0 + time * 0.2);
+                        blend1 = smoothstep(0.0, 0.5, n);
+                        blend2 = smoothstep(0.3, 0.7, n);
+                        blend3 = smoothstep(0.5, 1.0, n);
+                    }
+                    
+                    // Blend colors with smooth transitions
+                    vec3 color = mix(color1, color2, blend2);
+                    color = mix(color, color3, blend3);
+                    
+                    // Add subtle pulsing effect
+                    float pulse = sin(time * speed) * 0.05 + 1.0;
+                    color *= pulse;
+                    
+                    // Output final color
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        });
+        
+        // Full-screen quad
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const quad = new THREE.Mesh(geometry, material);
+        scene.add(quad);
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update time uniform
+            uniforms.time.value += 0.01;
+            
+            // Smooth mouse movement
+            mouse.x += (targetMouse.x - mouse.x) * 0.1;
+            mouse.y += (targetMouse.y - mouse.y) * 0.1;
+            uniforms.mouse.value.set(mouse.x, mouse.y);
+            
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+        
+        // Handle window resize
+        function onWindowResize() {
+            const newWidth = Math.min(window.innerWidth, 1200);
+            const newHeight = newWidth / (16/9);
+            
+            renderer.setSize(newWidth, newHeight);
+            uniforms.resolution.value.set(newWidth, newHeight);
+        }
+        
+        window.addEventListener('resize', onWindowResize);
+        
+        // UI Controls
+        const color1Input = document.getElementById('color1');
+        const color2Input = document.getElementById('color2');
+        const color3Input = document.getElementById('color3');
+        const speedInput = document.getElementById('speed');
+        const distortionInput = document.getElementById('distortion');
+        const mouseInfluenceInput = document.getElementById('mouseInfluence');
+        const blendModeSelect = document.getElementById('blendMode');
+        const randomizeBtn = document.getElementById('randomize');
+        const resetBtn = document.getElementById('reset');
+        const toggleUiBtn = document.getElementById('toggle-ui');
+        const ui = document.getElementById('ui');
+        
+        // Update value displays
+        speedInput.addEventListener('input', function() {
+            uniforms.speed.value = parseFloat(this.value);
+            document.getElementById('speed-value').textContent = this.value;
+        });
+        
+        distortionInput.addEventListener('input', function() {
+            uniforms.distortion.value = parseFloat(this.value);
+            document.getElementById('distortion-value').textContent = this.value;
+        });
+        
+        mouseInfluenceInput.addEventListener('input', function() {
+            uniforms.mouseInfluence.value = parseFloat(this.value);
+            document.getElementById('mouseInfluence-value').textContent = this.value;
+        });
+        
+        // Color pickers
+        function updateColor1() {
+            uniforms.color1.value.set(color1Input.value);
+            document.querySelector('#color1 + .color-swatch').style.backgroundColor = color1Input.value;
+        }
+        
+        function updateColor2() {
+            uniforms.color2.value.set(color2Input.value);
+            document.querySelector('#color2 + .color-swatch').style.backgroundColor = color2Input.value;
+        }
+        
+        function updateColor3() {
+            uniforms.color3.value.set(color3Input.value);
+            document.querySelector('#color3 + .color-swatch').style.backgroundColor = color3Input.value;
+        }
+        
+        color1Input.addEventListener('input', updateColor1);
+        color2Input.addEventListener('input', updateColor2);
+        color3Input.addEventListener('input', updateColor3);
+        
+        // Blend mode
+        blendModeSelect.addEventListener('change', function() {
+            uniforms.blendMode.value = parseInt(this.value);
+        });
+        
+        // Randomize colors
+        function randomHexColor() {
+            return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+        }
+        
+        randomizeBtn.addEventListener('click', function() {
+            color1Input.value = randomHexColor();
+            color2Input.value = randomHexColor();
+            color3Input.value = randomHexColor();
+            updateColor1();
+            updateColor2();
+            updateColor3();
+        });
+        
+        // Reset to defaults
+        resetBtn.addEventListener('click', function() {
+            color1Input.value = '#ff3366';
+            color2Input.value = '#33ccff';
+            color3Input.value = '#9933ff';
+            speedInput.value = '0.5';
+            distortionInput.value = '0.3';
+            mouseInfluenceInput.value = '1.0';
+            blendModeSelect.value = '0';
+            
+            updateColor1();
+            updateColor2();
+            updateColor3();
+            uniforms.speed.value = 0.5;
+            uniforms.distortion.value = 0.3;
+            uniforms.mouseInfluence.value = 1.0;
+            uniforms.blendMode.value = 0;
+            
+            document.getElementById('speed-value').textContent = '0.5';
+            document.getElementById('distortion-value').textContent = '0.3';
+            document.getElementById('mouseInfluence-value').textContent = '1.0';
+        });
+        
+        // Toggle UI visibility
+        toggleUiBtn.addEventListener('click', function() {
+            ui.style.display = ui.style.display === 'none' ? 'block' : 'none';
+        });
+    </script>
+
+              
+          
+                
+          
+              
+</body></html>
